@@ -11,7 +11,7 @@ def check_args(file_args):
         if len(file_args) != 2 or int(file_args[1]) <= 0:
             raise Exception()
     except:
-        print("Usage:  create_measurements1B.sh <positive integer number of records to create>")
+        print("Usage:  create_measurements100K.sh <positive integer number of records to create>")
         print("        You can use underscore notation for large number of records.")
         print("        For example:  1_000_000_000 for one billion")
         exit()
@@ -95,7 +95,7 @@ def build_test_data(weather_station_names, num_rows_to_create):
     print('Criando o arquivo... isso vai demorar uns 10 minutos...')
 
     try:
-        with open("./data/measurements1B.txt", 'w', encoding="utf-8") as file:
+        with open("./data/measurements100K.txt", 'w', encoding="utf-8") as file:
             for s in range(0,num_rows_to_create // batch_size):
                 
                 batch = random.choices(station_names_10k_max, k=batch_size)
@@ -110,10 +110,10 @@ def build_test_data(weather_station_names, num_rows_to_create):
     
     end_time = time.time()
     elapsed_time = end_time - start_time
-    file_size = os.path.getsize("./data/measurements1B.txt")
+    file_size = os.path.getsize("./data/measurements100K.txt")
     human_file_size = convert_bytes(file_size)
  
-    print("Arquivo escrito com sucesso data/measurements1B.txt")
+    print("Arquivo escrito com sucesso data/measurements100K.txt")
     print(f"Tamanho final:  {human_file_size}")
     print(f"Tempo decorrido: {format_elapsed_time(elapsed_time)}")
 
@@ -122,7 +122,7 @@ def main():
     """
     main program function
     """
-    num_rows_to_create = 1_000_000_000
+    num_rows_to_create = 100_000
     weather_station_names = []
     weather_station_names = build_weather_station_name_list()
     print(estimate_file_size(weather_station_names, num_rows_to_create))
