@@ -127,11 +127,21 @@ def process_with_spark(file_path):
     Example processing function using Apache Spark.
     Reads the dataset and calculates statistics.
     """
-    # Initialize Spark session
-    spark = SparkSession.builder.appName("Benchmarking").getOrCreate()
+    from pyspark.sql import SparkSession
+
+    # Initialize Spark session with additional configuration
+    spark = SparkSession.builder \
+        .appName("Benchmarking") \
+        .config("spark.ui.showConsoleProgress", "false") \
+        .config("spark.executor.memory", "2g") \
+        .config("spark.driver.extraJavaOptions", "-Djava.security.manager=allow") \
+        .getOrCreate()
+
+    # Convert Path object to string
+    file_path_str = str(file_path)
 
     # Read the CSV file into a Spark DataFrame
-    df = spark.read.csv(file_path, sep=";", header=False, inferSchema=True)
+    df = spark.read.csv(file_path_str, sep=";", header=False, inferSchema=True)
     df = df.withColumnRenamed("_c0", "station_city_name").withColumnRenamed("_c1", "temperature")
 
     # Group by and calculate statistics
@@ -141,6 +151,8 @@ def process_with_spark(file_path):
     stats.show()
     spark.stop()
     return stats
+
+
 
 
 if __name__ == "__main__":
