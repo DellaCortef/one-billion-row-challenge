@@ -52,7 +52,7 @@ def sort_results_by_dataset_size(results_file):
     Reads the benchmark results CSV, sorts by dataset size, and saves it back.
     """
     # Define the order for sorting dataset sizes
-    size_order = ["10K", "100K", "1M", "2M", "3M"]
+    size_order = ["10K", "100K", "1M", "2M", "3M", "10M", "100M"]
     
     # Read the CSV into a DataFrame
     df = pd.read_csv(results_file)
@@ -100,28 +100,6 @@ def process_with_duckdb(file_path):
     return result
 
 
-def process_with_python(file_path):
-    """
-    Example processing function using plain Python.
-    Reads the dataset and calculates statistics.
-    """
-    temperature_per_station = defaultdict(list)
-
-    # Read the file line by line
-    with open(file_path, "r", encoding="utf-8") as file:
-        for line in file:
-            station, temperature = line.strip().split(";")
-            temperature_per_station[station].append(float(temperature))
-
-    # Calculate statistics
-    stats = {station: {
-        "min": min(temps),
-        "mean": sum(temps) / len(temps),
-        "max": max(temps)
-    } for station, temps in temperature_per_station.items()}
-    return stats
-
-
 def process_with_spark(file_path):
     """
     Example processing function using Apache Spark.
@@ -153,9 +131,98 @@ def process_with_spark(file_path):
     return stats
 
 
+def process_with_python(file_path):
+    """
+    Example processing function using plain Python.
+    Reads the dataset and calculates statistics.
+    """
+    temperature_per_station = defaultdict(list)
+
+    # Read the file line by line
+    with open(file_path, "r", encoding="utf-8") as file:
+        for line in file:
+            station, temperature = line.strip().split(";")
+            temperature_per_station[station].append(float(temperature))
+
+    # Calculate statistics
+    stats = {station: {
+        "min": min(temps),
+        "mean": sum(temps) / len(temps),
+        "max": max(temps)
+    } for station, temps in temperature_per_station.items()}
+    return stats
+
+
+def remove_duplicates_from_results(results_file):
+    """
+    Removes duplicate rows from the benchmark results file.
+    """
+    # Read the results file
+    df = pd.read_csv(results_file)
+
+    # Drop duplicates
+    df_deduplicated = df.drop_duplicates()
+
+    # Save the deduplicated results back to the file
+    df_deduplicated.to_csv(results_file, index=False)
+
+    print(f"Duplicates removed from {results_file}.")
+
+
+import threading
+
+def benchmark_tool(tool_name, dataset_size, processing_function, dataset_path, timeout=300):
+    """
+    Benchmark a tool's processing time and save the result.
+
+    Parameters:
+        tool_name (str): The name of the tool/framework (e.g., Pandas, DuckDB, Python, Spark).
+        dataset_size (str): The dataset size (e.g., '1M', '10M', '100M').
+        processing_function (callable): The function that processes the dataset.
+        dataset_path (Path): Path to the dataset file.
+        timeout (int): Maximum time (in seconds) allowed for the processing.
+    """
+    result_dict = {
+        "Tool": tool_name,
+        "Dataset Size": dataset_size,
+    }
+
+    # Start the processing function in a separate thread
+    def run_function():
+        nonlocal result_dict
+        start_time = time.time()
+        try:
+            processing_function(dataset_path)
+            elapsed_time = time.time() - start_time
+            result_dict["Processing Time (s)"] = round(elapsed_time, 2)
+        except Exception as e:
+            result_dict["Processing Time (s)"] = f"Error: {str(e)}"
+
+    thread = threading.Thread(target=run_function)
+    thread.start()
+    thread.join(timeout)
+
+    # If the thread is still alive after timeout, record a timeout message
+    if thread.is_alive():
+        result_dict["Processing Time (s)"] = f"Timed out after {timeout} seconds"
+        thread.join(0)  # Terminate the thread (best effort)
+
+    # Save the result to the CSV file
+    results_df = pd.DataFrame([result_dict])
+    if Path(RESULTS_FILE).exists():
+        results_df.to_csv(RESULTS_FILE, mode="a", header=False, index=False)
+    else:
+        results_df.to_csv(RESULTS_FILE, index=False)
+
+    print(f"{tool_name} completed on {dataset_size} dataset: {result_dict['Processing Time (s)']}.")
+
 
 
 if __name__ == "__main__":
+    # Clear the results file if it exists
+    if Path(RESULTS_FILE).exists():
+        os.remove(RESULTS_FILE)
+
     # Paths to datasets
     datasets = {
         "10K":  Path("data/measurements10K.txt"),
@@ -163,6 +230,8 @@ if __name__ == "__main__":
         "1M":   Path("data/measurements1M.txt"),
         "2M":   Path("data/measurements2M.txt"),
         "3M":   Path("data/measurements3M.txt"),
+        "10M":  Path("data/measurements10M.txt"),
+        "100M": Path("data/measurements100M.txt")
     }
 
     # Benchmark each tool with each dataset
@@ -173,13 +242,14 @@ if __name__ == "__main__":
         print(f"Benchmarking DuckDB on {dataset_size} dataset...")
         benchmark_tool("DuckDB", dataset_size, process_with_duckdb, dataset_path)
 
-        print(f"Benchmarking Python on {dataset_size} dataset...")
-        benchmark_tool("Python", dataset_size, process_with_python, dataset_path)
-
         print(f"Benchmarking Spark on {dataset_size} dataset...")
         benchmark_tool("Spark", dataset_size, process_with_spark, dataset_path)
 
+        print(f"Benchmarking Python on {dataset_size} dataset...")
+        benchmark_tool("Python", dataset_size, process_with_python, dataset_path)
+
     print(f"Benchmark results saved to {RESULTS_FILE}")
 
-    # Sort the benchmark results by dataset size
+    # Sort the benchmark results by dataset size and removing duplicates
     sort_results_by_dataset_size(RESULTS_FILE)
+    remove_duplicates_from_results(RESULTS_FILE)
